@@ -1,0 +1,171 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- ===== UI (persist on death) =====
+local gui = Instance.new("ScreenGui")
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.fromScale(0.22, 0.22)
+frame.Position = UDim2.fromScale(0.4, 0.7)
+frame.BackgroundColor3 = Color3.fromRGB(10,10,10)
+frame.BorderSizePixel = 0
+
+-- Drag bar
+local bar = Instance.new("Frame", frame)
+bar.Size = UDim2.fromScale(1,0.2)
+bar.BackgroundColor3 = Color3.fromRGB(0,0,0)
+
+local title = Instance.new("TextLabel", bar)
+title.Size = UDim2.fromScale(1,1)
+title.Text = "FAKE TAB"
+title.TextScaled = true
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.Code
+local stroke = Instance.new("UIStroke", title)
+stroke.Color = Color3.new(1,1,1)
+
+-- Buttons
+local function makeButton(text, y)
+	local b = Instance.new("TextButton", frame)
+	b.Size = UDim2.fromScale(1,0.2)
+	b.Position = UDim2.fromScale(0,y)
+	b.Text = text
+	b.TextScaled = true
+	b.BackgroundColor3 = Color3.fromRGB(0,0,0)
+	b.TextColor3 = Color3.new(1,1,1)
+	b.Font = Enum.Font.Code
+	local s = Instance.new("UIStroke", b)
+	s.Color = Color3.new(1,1,1)
+	return b
+end
+
+local tabBtn = makeButton("FAKE TAB: OFF", 0.22)
+local tabBind = makeButton("FAKE TAB KEY: NONE", 0.44)
+local hideBind = makeButton("HIDE UI KEY: NONE", 0.66)
+
+-- ===== Drag (Mouse + Touch) =====
+local dragging = false
+local dragStart, startPos
+
+bar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+	end
+end)
+
+bar.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(
+			startPos.X.Scale, startPos.X.Offset + delta.X,
+			startPos.Y.Scale, startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+-- ===== FAKE TAB (freeze) =====
+local active = false
+local bodyPos, bodyGyro
+
+local function applyTab()
+	local char = player.Character
+	if not char then return end
+	local hrp = char:WaitForChild("HumanoidRootPart", 2)
+	local hum = char:WaitForChild("Humanoid", 2)
+	if not hrp or not hum then return end
+
+	hum.WalkSpeed = 0
+	hum.JumpPower = 0
+	hum.AutoRotate = false
+
+	bodyPos = Instance.new("BodyPosition", hrp)
+	bodyPos.MaxForce = Vector3.new(1e6,1e6,1e6)
+	bodyPos.Position = hrp.Position
+
+	bodyGyro = Instance.new("BodyGyro", hrp)
+	bodyGyro.MaxTorque = Vector3.new(1e6,1e6,1e6)
+	bodyGyro.CFrame = hrp.CFrame
+end
+
+local function removeTab()
+	local char = player.Character
+	if not char then return end
+	local hum = char:FindFirstChild("Humanoid")
+	if hum then
+		hum.WalkSpeed = 16
+		hum.JumpPower = 50
+		hum.AutoRotate = true
+	end
+	if bodyPos then bodyPos:Destroy() end
+	if bodyGyro then bodyGyro:Destroy() end
+end
+
+local function toggleTab()
+	active = not active
+	tabBtn.Text = active and "FAKE TAB: ON" or "FAKE TAB: OFF"
+	if active then
+		applyTab()
+	else
+		removeTab()
+	end
+end
+
+tabBtn.MouseButton1Click:Connect(toggleTab)
+
+player.CharacterAdded:Connect(function()
+	if active then
+		task.wait(0.3)
+		applyTab()
+	end
+end)
+
+-- ===== Keybinds =====
+local waiting = nil
+local tabKey = nil
+local hideKey = nil
+
+tabBind.MouseButton1Click:Connect(function()
+	waiting = "tab"
+	tabBind.Text = "PRESS A KEY..."
+end)
+
+hideBind.MouseButton1Click:Connect(function()
+	waiting = "hide"
+	hideBind.Text = "PRESS A KEY..."
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+
+	if waiting and input.UserInputType == Enum.UserInputType.Keyboard then
+		if waiting == "tab" then
+			tabKey = input.KeyCode
+			tabBind.Text = "FAKE TAB KEY: "..input.KeyCode.Name
+		elseif waiting == "hide" then
+			hideKey = input.KeyCode
+			hideBind.Text = "HIDE UI KEY: "..input.KeyCode.Name
+		end
+		waiting = nil
+		return
+	end
+
+	if tabKey and input.KeyCode == tabKey then
+		toggleTab()
+	end
+
+	if hideKey and input.KeyCode == hideKey then
+		frame.Visible = not frame.Visible
+	end
+end)
